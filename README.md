@@ -4,7 +4,7 @@ A tiny "twin-stick" shooter built on Pygame primitives.
 
 ## About
 
-This was my very first game in Python, found languishing away in a directory on
+This was my very first game in Python written in 2013, found languishing away in a directory on
 one cloud server or another. I had only the barest understanding of Python and
 Pygame at the time as evidenced by the gnarly `if else` trees and the giant app
 loop.
