@@ -14,7 +14,6 @@ STOP_RUNNING = False
 top_score = 0
 
 
-
 def new_attack(new_dir, new_type, spawn_location, container):
     attack_definition = config.attacks[new_type]
     new_attack = {
@@ -348,66 +347,14 @@ def game():
         # Draw the score and top score.
         text_draw('Score: %s' % player["score"], font, windowSurface, 20, 620, config.colors["text"])
         text_draw('Top Score: %s' % top_score, font, windowSurface, 20, 660, config.colors["text"])
-        if player["life"] >= 1:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(550, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(550, 620, 30, 30), 2)
-        if player["life"] >= 2:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(510, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(510, 620, 30, 30), 2)
-        if player["life"] >= 3:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(470, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(470, 620, 30, 30), 2)
-        if player["life"] >= 4:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(430, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(430, 620, 30, 30), 2)
-        if player["life"] >= 5:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(390, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(390, 620, 30, 30), 2)
-        if player["life"] >= 6:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(350, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(350, 620, 30, 30), 2)
-        if player["life"] >= 7:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(310, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(310, 620, 30, 30), 2)
-        if player["life"] >= 8:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(270, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(270, 620, 30, 30), 2)
-        if player["life"] >= 9:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(230, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(230, 620, 30, 30), 2)
-        if player["life"] >= 10:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(190, 620, 30, 30))
-        else:
-            pygame.draw.rect(windowSurface, config.colors["player"],
-                             pygame.Rect(190, 620, 30, 30), 2)
+
+        life_block = pygame.Rect(0, 620, 30, 30)
+        for x in range(1, 11):
+            life_block.left = 590 - (x * 40)
+            if player["life"] >= x:
+                pygame.draw.rect(windowSurface, config.colors["player"], life_block)
+            else:
+                pygame.draw.rect(windowSurface, config.colors["player"], life_block, 2)
 
         # Age and remove attacks
         for a in attacks[:]:
