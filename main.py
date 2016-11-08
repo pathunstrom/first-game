@@ -2,312 +2,246 @@
 import pygame
 import random
 import sys
-from pygame.locals import *
+from pygame.locals import KEYDOWN, KEYUP, QUIT
+from pygame.locals import K_ESCAPE, K_RETURN
+from pygame.locals import K_DOWN,K_LEFT, K_RIGHT, K_UP
+
+import config
 
 # set up pygame, the window, and the mouse cursor
-pygame.init()
-mainClock = pygame.time.Clock()
-TITLE = "Zombie Apocalypse"
-# Window size definition
-WINDOWWIDTH = 600
-WINDOWHEIGHT = 600
-SCOREZONE = 100
-SCOREBOARD = pygame.Rect(0, 601, 100, 600)
-BACKGROUNDCOLOR = (0, 0, 0)
-FPS = 35
-# Player Definition
-PLAYERCOLOR = (255, 0, 0)
-PLAYERSIZE = 15
-PLAYERMOVERATE = 3
-playerSafeZone = pygame.Rect(0, 0, 60, 60)
-# Attack Definitions
-ATTACKCOLOR = (255, 255, 0)
-ZATTACKSIZE = 5
-XATTACKSIZE = 5
-ZATTACKSPEED = 5
-XATTACKSPEED = 8
-ZLIFE = 2
-XLIFE = 15
-ZNOISESIZE = 300
-ZNOISEDIM = (ZNOISESIZE, ZNOISESIZE)
-XNOISESIZE = 200
-XNOISEDIM = (XNOISESIZE, XNOISESIZE)
-ZNOISE = pygame.Rect((0, 0), (ZNOISEDIM))
-XNOISE = pygame.Rect((0, 0), (XNOISEDIM))
-# Zombie Definitions
-ZOMCOLOR = (0, 255, 0)
-ZOMSIZE = 17
-zomSpeed = 1
-zomSight = pygame.Rect(0, 0, 150, 150)
-zomScore = 10
-# Skeleton Definition
-SKELCOLOR = (255, 255, 255)
-SKELSIZE = 13
-skelSpeed = 4
-skelSight = pygame.Rect(0, 0, 100, 100)
-skelScore = 15
-SPAWNRATE = 1001
-SPAWNINTERVAL = 50
+KEEP_RUNNING = True
+STOP_RUNNING = False
+top_score = 0
 
 
-def terminate():
-    pygame.quit()
-    sys.exit()
 
-
-def newAttack(newdir, newtype, spawnlocation):
-    if newtype == 'z':
-        newAttackSpeed = ZATTACKSPEED
-        newAttackSize = ZATTACKSIZE
-        newAttackLife = ZLIFE
-    elif newtype == 'x':
-        newAttackSpeed = XATTACKSPEED
-        newAttackSize = XATTACKSIZE
-        newAttackLife = XLIFE
-    newAttack = {
-        'rect': pygame.Rect((spawnlocation),
-                            (newAttackSize, newAttackSize)),
-        'direction': newdir, 'life': newAttackLife, 'speed': newAttackSpeed,
+def new_attack(new_dir, new_type, spawn_location, container):
+    attack_definition = config.attacks[new_type]
+    new_attack = {
+        'rect': pygame.Rect(spawn_location, (attack_definition["size"], attack_definition["size"])),
+        'direction': new_dir, 'life': attack_definition["life"], 'speed': attack_definition["velocity"],
     }
-    attacks.append(newAttack)
+    container.append(new_attack)
 
 
-def newEnemy(style):
-    spawn = random.randint(1, SPAWNRATE)
-    coin = random.randint(0, 10)
-    if style == "z" and spawn >= zomSpawn:
-        newSize = ZOMSIZE
-        newColor = ZOMCOLOR
-        newSpeed = zomSpeed
-        newSight = zomSight
-        newScore = zomScore
-    elif style == "s" and spawn >= skelSpawn:
-        newSize = SKELSIZE
-        newColor = SKELCOLOR
-        newSpeed = skelSpeed
-        newSight = skelSight
-        newScore = skelScore
-    else:
+def new_enemy(style, player, container):
+    spawn = random.randint(1, config.game["spawnrate"])
+    spawn_rate = {
+        "z": zomSpawn,
+        "s": skelSpawn
+    }
+    if not spawn > spawn_rate[style]:
         return
-    if coin <= awareness:
-        awake = True
-    else:
-        awake = False
-    newMobile = {
-        'rect': pygame.Rect(random.randint(1, WINDOWWIDTH - newSize),
-                            random.randint(1, WINDOWHEIGHT - newSize), newSize,
-                            newSize),
-        'color': newColor,
-        'speed': newSpeed,
-        'sight': newSight,
-        'awake': awake,
-        'score': newScore
+    coin = random.randint(0, 10)
+    enemy = config.enemies[style].copy()
+    sight = {
+        "z": zomSight,
+        "s": skelSight
     }
-    playerSafeZone.center = playerRect.center
-    if newMobile['rect'].colliderect(playerSafeZone) == False:
-        enemies.append(newMobile)
+    enemy["sight"] = sight[style]
+    enemy["awake"] = coin <= config.game["awareness"]
+    enemy["rect"] = pygame.Rect(0, 0, enemy["size"], enemy["size"])
+    enemy["rect"].topleft = (random.randint(1, config.game["width"] - enemy["size"]),
+                                 random.randint(1, config.game["height"] - enemy["size"]))
+    playerSafeZone.center = player["rect"].center
+    if not enemy['rect'].colliderect(playerSafeZone):
+        container.append(enemy)
 
 
-def textDraw(text, font, surface, x, y, color):
+def text_draw(text, font, surface, x, y, color):
     textobj = font.render(text, 1, color)
     textrect = textobj.get_rect()
     textrect.topleft = (x, y)
     surface.blit(textobj, textrect)
 
 
-def waitForPlayerToPressKey():
-    while True:
+def game_over(score):
+    global top_score
+    pygame.draw.rect(windowSurface, config.colors["background"],
+                     pygame.Rect(100, 50, 400, 500))
+    text_draw('GAME OVER', titlefont, windowSurface, 195, 60, config.colors["title"])
+    text_draw('Press Enter to continue', font, windowSurface, 220, 500,
+              config.colors["text"])
+    if score > top_score:
+        top_score = score
+        text_draw('New High Score!: %s' % top_score, font, windowSurface, 245,
+                  470, config.colors["text"])
+    else:
+        text_draw('Top Score: %s' % top_score, font, windowSurface, 250, 470,
+                  config.colors["text"])
+    running = True
+    while running:
         for event in pygame.event.get():
             if event.type == QUIT:
-                terminate()
+                return STOP_RUNNING
             if event.type == KEYDOWN:
-                if event.key == K_ESCAPE:  # pressing escape quits
-                    terminate()
+                if event.key == K_ESCAPE:
+                    return STOP_RUNNING
                 if event.key == K_RETURN:
-                    return
+                    return KEEP_RUNNING
+        pygame.display.update()
 
 
-windowSurface = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT + SCOREZONE))
-pygame.display.set_caption(TITLE)
-pygame.mouse.set_visible(False)
-topScore = 0
-TEXTCOLOR = (255, 255, 255)
-font = pygame.font.SysFont(None, 24)
-titlefont = pygame.font.SysFont(None, 48)
-TITLECOLOR = (0, 128, 0)
-
-# Outer loop
-while True:
-
-    pygame.draw.rect(windowSurface, BACKGROUNDCOLOR,
-                     pygame.Rect(100, 50, 400, 500))
-    textDraw(' %s ' % (TITLE), titlefont, windowSurface, 135, 60, TITLECOLOR)
-    textDraw('Press Enter to start', font, windowSurface, 220, 500, TEXTCOLOR)
-    textDraw('Top Score: %s' % (topScore), font, windowSurface, 250, 470,
-             TEXTCOLOR)
-    pygame.display.update()
-    waitForPlayerToPressKey()
-    # Set up game
-    playerRect = pygame.Rect(0, 0, PLAYERSIZE, PLAYERSIZE)
-    playerRect.center = ((WINDOWWIDTH / 2), (WINDOWHEIGHT / 2))
-    moveLeft = False
-    moveRight = False
-    moveUp = False
-    moveDown = False
-    lastMove = 0
-    # Set up libraries
+def game():
+    running = True
+    player = {
+        "rect": pygame.Rect(0, 0, config.player["size"], config.player["size"]),
+        "move": {
+            "left": False,
+            "right": False,
+            "up": False,
+            "down": False,
+            "last": 0
+        },
+        "score": 0,
+        "life": 10
+    }
+    player["rect"].center = ((config.game["width"] / 2), (config.game["height"] / 2))
     attacks = []
     enemies = []
-    # Variables
-    awareness = 0
-    score = 0
-    playerLife = 10
-    spawnSpeed = 0
-    zomSpawn = 975
-    skelSpawn = 995
-    # main loop
-    while True:
-        for event in pygame.event.get():
-            # End game if quit via window control
-            if event.type == QUIT:
-                terminate()
+    spawn_speed = 0
 
-            # Activate player movement
+    # main loop
+    while running:
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                return STOP_RUNNING
+
             if event.type == KEYDOWN:
                 if event.key == K_LEFT:
-                    moveRight = False
-                    moveLeft = True
+                    player["move"]["right"] = False
+                    player["move"]["left"] = True
                 if event.key == K_RIGHT:
-                    moveLeft = False
-                    moveRight = True
+                    player["move"]["left"] = False
+                    player["move"]["right"] = True
                 if event.key == K_UP:
-                    moveDown = False
-                    moveUp = True
+                    player["move"]["down"] = False
+                    player["move"]["up"] = True
                 if event.key == K_DOWN:
-                    moveUp = False
-                    moveDown = True
+                    player["move"]["up"] = False
+                    player["move"]["down"] = True
 
                 # Z attack creation
                 if event.key == ord('z'):
-                    ZNOISE.center = playerRect.center
+                    z_noise.center = player["rect"].center
                     for e in enemies:
-                        if e['awake'] == False:
-                            if ZNOISE.colliderect(e['rect']):
+                        if not e['awake']:
+                            if z_noise.colliderect(e['rect']):
                                 e['awake'] = True
-                    if moveUp == True:
-                        if moveLeft == True:
-                            newAttack(4, 'z', playerRect.topleft)
-                            newAttack(7, 'z', playerRect.topleft)
-                            newAttack(8, 'z', playerRect.topleft)
-                        elif moveRight == True:
-                            newAttack(8, 'z', playerRect.topright)
-                            newAttack(9, 'z', playerRect.topright)
-                            newAttack(6, 'z', playerRect.topright)
+                    if player["move"]["up"]:
+                        if player["move"]["left"]:
+                            new_attack(4, 'z', player["rect"].topleft, attacks)
+                            new_attack(7, 'z', player["rect"].topleft, attacks)
+                            new_attack(8, 'z', player["rect"].topleft, attacks)
+                        elif player["move"]["right"]:
+                            new_attack(8, 'z', player["rect"].topright, attacks)
+                            new_attack(9, 'z', player["rect"].topright, attacks)
+                            new_attack(6, 'z', player["rect"].topright, attacks)
                         else:
-                            newAttack(7, 'z', playerRect.midtop)
-                            newAttack(8, 'z', playerRect.midtop)
-                            newAttack(9, 'z', playerRect.midtop)
-                    elif moveDown == True:
-                        if moveLeft == True:
-                            newAttack(4, 'z', playerRect.bottomleft)
-                            newAttack(1, 'z', playerRect.bottomleft)
-                            newAttack(2, 'z', playerRect.bottomleft)
-                        elif moveRight == True:
-                            newAttack(6, 'z', playerRect.bottomright)
-                            newAttack(3, 'z', playerRect.bottomright)
-                            newAttack(2, 'z', playerRect.bottomright)
+                            new_attack(7, 'z', player["rect"].midtop, attacks)
+                            new_attack(8, 'z', player["rect"].midtop, attacks)
+                            new_attack(9, 'z', player["rect"].midtop, attacks)
+                    elif player["move"]["down"]:
+                        if player["move"]["left"]:
+                            new_attack(4, 'z', player["rect"].bottomleft, attacks)
+                            new_attack(1, 'z', player["rect"].bottomleft, attacks)
+                            new_attack(2, 'z', player["rect"].bottomleft, attacks)
+                        elif player["move"]["right"]:
+                            new_attack(6, 'z', player["rect"].bottomright, attacks)
+                            new_attack(3, 'z', player["rect"].bottomright, attacks)
+                            new_attack(2, 'z', player["rect"].bottomright, attacks)
                         else:
-                            newAttack(3, 'z', playerRect.midbottom)
-                            newAttack(2, 'z', playerRect.midbottom)
-                            newAttack(1, 'z', playerRect.midbottom)
-                    elif moveLeft == True:
-                        newAttack(7, 'z', playerRect.midleft)
-                        newAttack(4, 'z', playerRect.midleft)
-                        newAttack(1, 'z', playerRect.midleft)
-                    elif moveRight == True:
-                        newAttack(9, 'z', playerRect.midright)
-                        newAttack(6, 'z', playerRect.midright)
-                        newAttack(3, 'z', playerRect.midright)
+                            new_attack(3, 'z', player["rect"].midbottom, attacks)
+                            new_attack(2, 'z', player["rect"].midbottom, attacks)
+                            new_attack(1, 'z', player["rect"].midbottom, attacks)
+                    elif player["move"]["left"]:
+                        new_attack(7, 'z', player["rect"].midleft, attacks)
+                        new_attack(4, 'z', player["rect"].midleft, attacks)
+                        new_attack(1, 'z', player["rect"].midleft, attacks)
+                    elif player["move"]["right"]:
+                        new_attack(9, 'z', player["rect"].midright, attacks)
+                        new_attack(6, 'z', player["rect"].midright, attacks)
+                        new_attack(3, 'z', player["rect"].midright, attacks)
                     else:
-                        if lastMove == 2:
-                            newAttack(3, 'z', playerRect.midbottom)
-                            newAttack(2, 'z', playerRect.midbottom)
-                            newAttack(1, 'z', playerRect.midbottom)
-                        elif lastMove == 4:
-                            newAttack(7, 'z', playerRect.midleft)
-                            newAttack(4, 'z', playerRect.midleft)
-                            newAttack(1, 'z', playerRect.midleft)
-                        elif lastMove == 6:
-                            newAttack(9, 'z', playerRect.midright)
-                            newAttack(6, 'z', playerRect.midright)
-                            newAttack(3, 'z', playerRect.midright)
-                        elif lastMove == 8:
-                            newAttack(7, 'z', playerRect.midtop)
-                            newAttack(8, 'z', playerRect.midtop)
-                            newAttack(9, 'z', playerRect.midtop)
+                        if last_move == 2:
+                            new_attack(3, 'z', player["rect"].midbottom, attacks)
+                            new_attack(2, 'z', player["rect"].midbottom, attacks)
+                            new_attack(1, 'z', player["rect"].midbottom, attacks)
+                        elif last_move == 4:
+                            new_attack(7, 'z', player["rect"].midleft, attacks)
+                            new_attack(4, 'z', player["rect"].midleft, attacks)
+                            new_attack(1, 'z', player["rect"].midleft, attacks)
+                        elif last_move == 6:
+                            new_attack(9, 'z', player["rect"].midright, attacks)
+                            new_attack(6, 'z', player["rect"].midright, attacks)
+                            new_attack(3, 'z', player["rect"].midright, attacks)
+                        elif last_move == 8:
+                            new_attack(7, 'z', player["rect"].midtop, attacks)
+                            new_attack(8, 'z', player["rect"].midtop, attacks)
+                            new_attack(9, 'z', player["rect"].midtop, attacks)
 
                 # X Attack Creation
                 if event.key == ord('x'):
-                    XNOISE.center = playerRect.center
+                    x_noise.center = player["rect"].center
                     for e in enemies:
                         if e['awake'] == False:
-                            if XNOISE.colliderect(e['rect']):
+                            if x_noise.colliderect(e['rect']):
                                 e['awake'] = True
-                    if moveUp == True:
-                        if moveLeft == True:
-                            newAttack(7, 'x', playerRect.topleft)
-                        elif moveRight == True:
-                            newAttack(9, 'x', playerRect.topright)
+                    if player["move"]["up"]:
+                        if player["move"]["left"]:
+                            new_attack(7, 'x', player["rect"].topleft, attacks)
+                        elif player["move"]["right"]:
+                            new_attack(9, 'x', player["rect"].topright, attacks)
                         else:
-                            newAttack(8, 'x', playerRect.midtop)
-                    elif moveDown == True:
-                        if moveLeft:
-                            newAttack(1, 'x', playerRect.bottomleft)
-                        elif moveRight == True:
-                            newAttack(3, 'x', playerRect.bottomright)
+                            new_attack(8, 'x', player["rect"].midtop, attacks)
+                    elif player["move"]["down"]:
+                        if player["move"]["left"]:
+                            new_attack(1, 'x', player["rect"].bottomleft, attacks)
+                        elif player["move"]["right"]:
+                            new_attack(3, 'x', player["rect"].bottomright, attacks)
                         else:
-                            newAttack(2, 'x', playerRect.midbottom)
-                    elif moveLeft == True:
-                        newAttack(4, 'x', playerRect.midleft)
-                    elif moveRight == True:
-                        newAttack(6, 'x', playerRect.midright)
+                            new_attack(2, 'x', player["rect"].midbottom, attacks)
+                    elif player["move"]["left"]:
+                        new_attack(4, 'x', player["rect"].midleft, attacks)
+                    elif player["move"]["right"]:
+                        new_attack(6, 'x', player["rect"].midright, attacks)
                     else:
-                        if lastMove == 2:
-                            newAttack(2, 'x', playerRect.midbottom)
-                        elif lastMove == 4:
-                            newAttack(4, 'x', playerRect.midleft)
-                        elif lastMove == 6:
-                            newAttack(6, 'x', playerRect.midright)
-                        elif lastMove == 8:
-                            newAttack(8, 'x', playerRect.midtop)
+                        if last_move == 2:
+                            new_attack(2, 'x', player["rect"].midbottom, attacks)
+                        elif last_move == 4:
+                            new_attack(4, 'x', player["rect"].midleft, attacks)
+                        elif last_move == 6:
+                            new_attack(6, 'x', player["rect"].midright, attacks)
+                        elif last_move == 8:
+                            new_attack(8, 'x', player["rect"].midtop, attacks)
 
             # Deactivate player movement and save last direction
             if event.type == KEYUP:
                 if event.key == K_LEFT or event.key == ord('a'):
-                    moveLeft = False
-                    lastMove = 4
+                    player["move"]["left"] = False
+                    last_move = 4
                 if event.key == K_RIGHT or event.key == ord('d'):
-                    moveRight = False
-                    lastMove = 6
+                    player["move"]["right"] = False
+                    last_move = 6
                 if event.key == K_UP or event.key == ord('w'):
-                    moveUp = False
-                    lastMove = 8
+                    player["move"]["up"] = False
+                    last_move = 8
                 if event.key == K_DOWN or event.key == ord('s'):
-                    moveDown = False
-                    lastMove = 2
+                    player["move"]["down"] = False
+                    last_move = 2
                 # Close game if escape key is pressed
                 if event.key == K_ESCAPE:
-                    terminate()
+                    return STOP_RUNNING
 
         # Move the player around.
-        if moveLeft and playerRect.left > 0:
-            playerRect.move_ip(-1 * PLAYERMOVERATE, 0)
-        if moveRight and playerRect.right < WINDOWWIDTH:
-            playerRect.move_ip(PLAYERMOVERATE, 0)
-        if moveUp and playerRect.top > 0:
-            playerRect.move_ip(0, -1 * PLAYERMOVERATE)
-        if moveDown and playerRect.bottom < WINDOWHEIGHT:
-            playerRect.move_ip(0, PLAYERMOVERATE)
+        if player["move"]["left"] and player["rect"].left > 0:
+            player["rect"].move_ip(-1 * config.player["velocity"], 0)
+        if player["move"]["right"] and player["rect"].right < config.game["width"]:
+            player["rect"].move_ip(config.player["velocity"], 0)
+        if player["move"]["up"] and player["rect"].top > 0:
+            player["rect"].move_ip(0, -1 * config.player["velocity"])
+        if player["move"]["down"] and player["rect"].bottom < config.game["height"]:
+            player["rect"].move_ip(0, config.player["velocity"])
 
         # Move Attacks
         for a in attacks:
@@ -333,42 +267,42 @@ while True:
             if e['awake'] == False:
                 shuffle = random.randint(1, 10)
                 if shuffle == 1 and e['rect'].left > 0 and e[
-                    'rect'].bottom < WINDOWHEIGHT:
+                    'rect'].bottom < config.game["height"]:
                     e['rect'].move_ip(-1, 1)
-                elif shuffle == 2 and e['rect'].bottom < WINDOWHEIGHT:
+                elif shuffle == 2 and e['rect'].bottom < config.game["height"]:
                     e['rect'].move_ip(0, 1)
-                elif shuffle == 3 and e['rect'].right < WINDOWWIDTH and e[
-                    'rect'].bottom < WINDOWHEIGHT:
+                elif shuffle == 3 and e['rect'].right < config.game["width"] and e[
+                    'rect'].bottom < config.game["height"]:
                     e['rect'].move_ip(1, 1)
                 elif shuffle == 4 and e['rect'].left > 0:
                     e['rect'].move_ip(-1, 0)
-                elif shuffle == 6 and e['rect'].right < WINDOWWIDTH:
+                elif shuffle == 6 and e['rect'].right < config.game["width"]:
                     e['rect'].move_ip(1, 0)
                 elif shuffle == 7 and e['rect'].left > 0 and e['rect'].top > 0:
                     e['rect'].move_ip(-1, -1)
                 elif shuffle == 8 and e['rect'].top > 0:
                     e['rect'].move_ip(0, -1)
-                elif shuffle == 9 and e['rect'].right < WINDOWWIDTH and e[
+                elif shuffle == 9 and e['rect'].right < config.game["width"] and e[
                     'rect'].top > 0:
                     e['rect'].move_ip(1, 1)
             elif e['awake'] == True:
-                if playerRect.centerx > e['rect'].centerx:
-                    if playerRect.centery > e['rect'].centery:
+                if player["rect"].centerx > e['rect'].centerx:
+                    if player["rect"].centery > e['rect'].centery:
                         e['rect'].move_ip(e['speed'], e['speed'])
-                    elif playerRect.centery < e['rect'].centery:
+                    elif player["rect"].centery < e['rect'].centery:
                         e['rect'].move_ip(e['speed'], - e['speed'])
                     else:
                         e['rect'].move_ip(e['speed'], 0)
-                elif playerRect.centerx < e['rect'].centerx:
-                    if playerRect.centery > e['rect'].centery:
+                elif player["rect"].centerx < e['rect'].centerx:
+                    if player["rect"].centery > e['rect'].centery:
                         e['rect'].move_ip(- e['speed'], e['speed'])
-                    elif playerRect.centery < e['rect'].centery:
+                    elif player["rect"].centery < e['rect'].centery:
                         e['rect'].move_ip(- e['speed'], - e['speed'])
                     else:
                         e['rect'].move_ip(- e['speed'], 0)
-                elif playerRect.centery > e['rect'].centery:
+                elif player["rect"].centery > e['rect'].centery:
                     e['rect'].move_ip(0, e['speed'])
-                elif playerRect.centery < e['rect'].centery:
+                elif player["rect"].centery < e['rect'].centery:
                     e['rect'].move_ip(0, - e['speed'])
 
         # Collision checks
@@ -376,20 +310,20 @@ while True:
         for a in attacks[:]:
             for e in enemies[:]:
                 if a['rect'].colliderect(e['rect']) == True:
-                    score += e['score']
+                    player["score"] += e['score']
                     enemies.remove(e)
                     attacks.remove(a)
                     break
         # Player Against Enemies
         for e in enemies[:]:
-            if playerRect.colliderect(e['rect']) == True:
-                playerLife -= 1
+            if player["rect"].colliderect(e['rect']) == True:
+                player["life"] -= 1
                 enemies.remove(e)
         # Wake zones
         for e in enemies:
             if e['awake'] == False:
                 e['sight'].center = e['rect'].center
-            if e['sight'].colliderect(playerRect) == True:
+            if e['sight'].colliderect(player["rect"]) == True:
                 e['awake'] = True
             for e2 in enemies:
                 if e2['awake'] == True:
@@ -399,118 +333,145 @@ while True:
 
         # Spawn
         # Enemies
-        newEnemy("s")
-        newEnemy("z")
+        new_enemy("s", player, enemies)
+        new_enemy("z", player, enemies)
 
         # Draw frame
-        windowSurface.fill(BACKGROUNDCOLOR)
+        windowSurface.fill(config.colors["background"])
         for a in attacks:
-            pygame.draw.rect(windowSurface, ATTACKCOLOR, a['rect'])
-        pygame.draw.rect(windowSurface, PLAYERCOLOR, playerRect)
+            pygame.draw.rect(windowSurface, config.colors["attack"], a['rect'])
+        pygame.draw.rect(windowSurface, config.colors["player"], player["rect"])
         for e in enemies:
             pygame.draw.rect(windowSurface, e['color'], e['rect'])
         # Score area
-        pygame.draw.rect(windowSurface, BACKGROUNDCOLOR, SCOREBOARD)
+        pygame.draw.rect(windowSurface, config.colors["background"], SCOREBOARD)
         # Draw the score and top score.
-        textDraw('Score: %s' % (score), font, windowSurface, 20, 620, TEXTCOLOR)
-        textDraw('Top Score: %s' % (topScore), font, windowSurface, 20, 660,
-                 TEXTCOLOR)
-        if playerLife >= 1:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        text_draw('Score: %s' % player["score"], font, windowSurface, 20, 620, config.colors["text"])
+        text_draw('Top Score: %s' % top_score, font, windowSurface, 20, 660, config.colors["text"])
+        if player["life"] >= 1:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(550, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(550, 620, 30, 30), 2)
-        if playerLife >= 2:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 2:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(510, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(510, 620, 30, 30), 2)
-        if playerLife >= 3:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 3:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(470, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(470, 620, 30, 30), 2)
-        if playerLife >= 4:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 4:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(430, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(430, 620, 30, 30), 2)
-        if playerLife >= 5:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 5:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(390, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(390, 620, 30, 30), 2)
-        if playerLife >= 6:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 6:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(350, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(350, 620, 30, 30), 2)
-        if playerLife >= 7:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 7:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(310, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(310, 620, 30, 30), 2)
-        if playerLife >= 8:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 8:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(270, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(270, 620, 30, 30), 2)
-        if playerLife >= 9:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 9:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(230, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(230, 620, 30, 30), 2)
-        if playerLife >= 10:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+        if player["life"] >= 10:
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(190, 620, 30, 30))
         else:
-            pygame.draw.rect(windowSurface, PLAYERCOLOR,
+            pygame.draw.rect(windowSurface, config.colors["player"],
                              pygame.Rect(190, 620, 30, 30), 2)
 
         # Age and remove attacks
         for a in attacks[:]:
             if (a['life'] < 0
-                    or a['rect'].bottom < 0
-                    or a['rect'].top > WINDOWHEIGHT
-                    or a['rect'].left > WINDOWWIDTH
-                    or a['rect'].right < 0):
+                or a['rect'].bottom < 0
+                or a['rect'].top > config.game["height"]
+                or a['rect'].left > config.game["width"]
+                or a['rect'].right < 0):
                 attacks.remove(a)
             a['life'] -= 1
 
         # Break loop if player is dead.
-        if playerLife <= 0:
-            break
+        if player["life"] <= 0:
+            return game_over(player["score"])
 
-        spawnSpeed += 1
-        if spawnSpeed == SPAWNINTERVAL:
+        spawn_speed += 1
+        if spawn_speed == config.game["spawn_increase_interval"]:
+            global zomSpawn
             zomSpawn -= 1
+            global skelSpawn
             skelSpawn -= 1
 
         # Update screen
         pygame.display.update()
-        mainClock.tick(FPS)
+        mainClock.tick(config.game["fps"])
 
-    # Draw Game over screen
-    pygame.draw.rect(windowSurface, BACKGROUNDCOLOR,
-                     pygame.Rect(100, 50, 400, 500))
-    textDraw('GAME OVER', titlefont, windowSurface, 195, 60, TITLECOLOR)
-    textDraw('Press Enter to continue', font, windowSurface, 220, 500,
-             TEXTCOLOR)
-    if score > topScore:
-        topScore = score
-        textDraw('New High Score!: %s' % (topScore), font, windowSurface, 245,
-                 470, TEXTCOLOR)
-    else:
-        textDraw('Top Score: %s' % (topScore), font, windowSurface, 250, 470,
-                 TEXTCOLOR)
-    pygame.display.update()
-    waitForPlayerToPressKey()
+
+def main_menu():
+    running = True
+    while running:
+        pygame.draw.rect(windowSurface, config.colors["background"],
+                         pygame.Rect(100, 50, 400, 500))
+        text_draw(' %s ' % (config.game["title"]), titlefont, windowSurface, 135, 60, config.colors["title"])
+        text_draw('Press Enter to start', font, windowSurface, 220, 500, config.colors["text"])
+        text_draw('Top Score: %s' % top_score, font, windowSurface, 250, 470, config.colors["text"])
+        pygame.display.update()
+
+        for event in pygame.event.get():
+            if event.type == QUIT:
+                return
+            if event.type == KEYDOWN:
+                if event.key == K_ESCAPE:
+                    return
+                if event.key == K_RETURN:
+                    running = game()
+
+
+if __name__ == "__main__":
+    pygame.init()
+    mainClock = pygame.time.Clock()
+    font = pygame.font.SysFont(None, 24)
+    titlefont = pygame.font.SysFont(None, 48)
+    SCOREBOARD = pygame.Rect(*config.scoreboard)
+    playerSafeZone = pygame.Rect(*config.safe_zone)
+    z_noise = pygame.Rect(*config.z_noise_rect)
+    x_noise = pygame.Rect(*config.x_noise_rect)
+    zomSight = pygame.Rect(*config.zombie_sight)
+    skelSight = pygame.Rect(*config.skeleton_sight)
+    zomSpawn = 975
+    skelSpawn = 995
+    windowSurface = pygame.display.set_mode((config.game["width"],
+                                             config.game["height"] + SCOREBOARD.height))
+    pygame.display.set_caption(config.game["title"])
+    pygame.mouse.set_visible(False)
+    main_menu()
+    pygame.quit()
+    sys.exit()
